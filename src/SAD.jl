@@ -58,8 +58,8 @@ function split_train(files; splits = 6, iterations = 5, speech_frames = sf -> sp
   nonspeech_gmm = GMM(d, 1)
 
   for i = 1:(splits + 1)
-    new_s  = @timer "training $(2^(i-1))g speech models" par_train(speech_gmm, chain(s...), iterations = iterations)
-    new_ns = @timer "training $(2^(i-1))g nonspeech models" par_train(nonspeech_gmm, chain(ns...), iterations = iterations)
+    @timer "training $(2^(i-1))g speech models"    new_s  = par_train(speech_gmm, s, iterations = iterations)
+    @timer "training $(2^(i-1))g nonspeech models" new_ns = par_train(nonspeech_gmm, ns, iterations = iterations)
     if i < (splits + 1)
       speech_gmm    = split(new_s)
       nonspeech_gmm = split(new_ns)
@@ -110,8 +110,38 @@ function score(sf :: SegmentedFile, speech :: GMM, nonspeech :: GMM; window_radi
   return smoothed
 end
 
-function filter_segments(scores; threshold = 0.0, min_duration = 5)
+function filter_short_segments(segs :: Vector{(Int, Int)}; min_duration = 20, verbose = false)
+  nonshort_segs = (Int, Int)[]
+  for i = 1:length(segs)
+    s, e = segs[i]
+    if (e - s + 1) < min_duration
+      verbose && @info "removing segment from $s to $e: too short"
+    else
+      push!(nonshort_segs, (s, e))
+    end
+  end
+
+  return nonshort_segs
+end
+
+function degap_segments(segs :: Vector{(Int, Int)}; min_gap = 15, verbose = false)
+  degapped_segs = (Int, Int)[]
+  for i = 1:length(segs)
+    s, e = segs[i]
+    if length(degapped_segs) > 1 && (s - degapped_segs[end][2]) < min_gap
+      verbose && @info "combining segment [$(degapped_segs[end][1]) to $(degapped_segs[end][2])] with [$s to $e]: short gap"
+      degapped_segs[end] = (degapped_segs[end][1], e)
+    else
+      push!(degapped_segs, (s, e))
+    end
+  end
+
+  return degapped_segs
+end
+
+function filter_segments(scores; threshold = 0.0, min_duration = 15, min_gap = 10, verbose = false)
   decs = [ s >= threshold for s in scores ]
+  segs = (Int, Int)[]
   for i = 1:length(decs)
     start = decs[i] && (i == 1 || (i > 1 && decs[i - 1] == false))
     if start
@@ -119,18 +149,24 @@ function filter_segments(scores; threshold = 0.0, min_duration = 5)
       while (j < length(decs)) && decs[j]
         j += 1
       end
-      if (j - 1 + 1) < min_duration
-        for k = i:j
-          decs[k] = false
-        end
-      end
+      push!(segs, (i, j))
     end
   end
-  return decs
+
+  filtered = degap_segments(filter_short_segments(segs, min_duration = min_duration, verbose = verbose), min_gap = min_gap, verbose = verbose)
+  ret = [ false for s in scores ]
+  for i = 1:length(filtered)
+    s, e = filtered[i]
+    for j = s:e
+      ret[j] = true
+    end
+  end
+
+  return ret
 end
 
-function test(files, speech :: GMM, nonspeech :: GMM; threshold = 0.0, speech_mask = sf -> mask(sf), nonspeech_mask = sf -> negate_mask(sf))
-  decs   = [ filter_segments(score(f, speech, nonspeech), threshold = threshold) for f in files ]
+function test(files, speech :: GMM, nonspeech :: GMM; verbose = false, min_gap = 10, min_duration = 20, threshold = 0.0, speech_mask = sf -> mask(sf), nonspeech_mask = sf -> negate_mask(sf))
+  decs   = [ filter_segments(score(f, speech, nonspeech), threshold = threshold, min_gap = min_gap, min_duration = min_duration, verbose = verbose) for f in files ]
   N      = 0
   FAs    = 0
   misses = 0
