@@ -69,9 +69,21 @@ function split_train(files; splits = 6, iterations = 5, speech_frames = sf -> sp
   return speech_gmm, nonspeech_gmm
 end
 
+function take_all(iter, size)
+  buffer = Array(Any, size)
+  idx = 1
+  for i in iter
+    if idx <= size
+      buffer[idx] = i
+      idx += 1
+    end
+  end
+  buffer
+end
+
 function kmeans_train(files; g = 64, iterations = 5, sample_size = 1500, speech_frames = sf -> speech(sf), nonspeech_frames = sf -> nonspeech(sf))
-  init_s    = map(sf -> take(speech_frames(sf), sample_size), files)
-  init_ns   = map(sf -> take(nonspeech_frames(sf), sample_size), files)
+  init_s    = map(sf -> take_all(speech_frames(sf), sample_size), files)
+  init_ns   = map(sf -> take_all(nonspeech_frames(sf), sample_size), files)
   speech    = map(speech_frames, files)
   nonspeech = map(nonspeech_frames, files)
   

@@ -44,7 +44,7 @@ if args["--test"] != nothing
   ns = deserialize(f)
   close(f)
 
-  files = marks(args["--test"], dir = args["--audio"])
+  files = marks(args["--test"], dir = args["--audio"], collars = { "S" => 0.25f0, "NS" => 0.1f0, "NT" => 0.1f0 })
   threshold, opt_fa, opt_miss, opt_dc, fa, miss, eer, N_speech, N_ns = optimize(files, s, ns, speech_mask = S, nonspeech_mask = NS)
   @info "optimum threshold = $threshold [eer = $eer, fa rate = $opt_fa, miss rate = $opt_miss, decision cost = $opt_dc]"
 
