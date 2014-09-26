@@ -82,8 +82,8 @@ function take_all(iter, size)
 end
 
 function kmeans_train(files; g = 64, iterations = 5, sample_size = 1500, speech_frames = sf -> speech(sf), nonspeech_frames = sf -> nonspeech(sf))
-  init_s    = map(sf -> take_all(speech_frames(sf), sample_size), files)
-  init_ns   = map(sf -> take_all(nonspeech_frames(sf), sample_size), files)
+  init_s    = map(sf -> speech_frames(sf), files[sortperm(files, by = x -> rand())[0:10]])
+  init_ns   = map(sf -> nonspeech_frames(sf), files[sortperm(files, by = x -> rand())[0:10]])
   speech    = map(speech_frames, files)
   nonspeech = map(nonspeech_frames, files)
   
