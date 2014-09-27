@@ -82,8 +82,8 @@ function take_all(iter, size)
 end
 
 function kmeans_train(files; g = 64, iterations = 5, sample_size = 1500, speech_frames = sf -> speech(sf), nonspeech_frames = sf -> nonspeech(sf))
-  init_s    = map(sf -> speech_frames(sf), files[sortperm(files, by = x -> rand())[0:10]])
-  init_ns   = map(sf -> nonspeech_frames(sf), files[sortperm(files, by = x -> rand())[0:10]])
+  init_s    = map(sf -> speech_frames(sf), files[sortperm(files, by = x -> rand())[1:min(sample_size, end)]])
+  init_ns   = map(sf -> nonspeech_frames(sf), files[sortperm(files, by = x -> rand())[1:min(sample_size, end)]])
   speech    = map(speech_frames, files)
   nonspeech = map(nonspeech_frames, files)
   
@@ -132,7 +132,7 @@ function filter_short_segments(segs :: Vector{(Int, Int)}; min_duration = 20, ve
       push!(nonshort_segs, (s, e))
     end
   end
-
+  
   return nonshort_segs
 end
 
@@ -178,11 +178,12 @@ function filter_segments(scores; threshold = 0.0, min_duration = 15, min_gap = 1
 end
 
 function test(files, speech :: GMM, nonspeech :: GMM; verbose = false, min_gap = 10, min_duration = 20, threshold = 0.0, speech_mask = sf -> mask(sf), nonspeech_mask = sf -> negate_mask(sf))
-  decs   = [ filter_segments(score(f, speech, nonspeech), threshold = threshold, min_gap = min_gap, min_duration = min_duration, verbose = verbose) for f in files ]
+  decs   = pmap(f -> filter_segments(score(f, speech, nonspeech), threshold = threshold, min_gap = min_gap, min_duration = min_duration, verbose = verbose), files) 
+  #[ filter_segments(score(f, speech, nonspeech), threshold = threshold, min_gap = min_gap, min_duration = min_duration, verbose = verbose) for f in files ]
   N      = 0
   FAs    = 0
   misses = 0
-
+  
   for (k, sf) in enumerate(files)
     s_mask, s_frames   = speech_mask(sf)
     ns_mask, ns_frames = nonspeech_mask(sf)
@@ -203,7 +204,7 @@ function test(files, speech :: GMM, nonspeech :: GMM; verbose = false, min_gap =
 end
 
 function optimize(files, speech, nonspeech; c_miss = 1.0, c_fa = 1.0, speech_mask = sf -> mask(sf), nonspeech_mask = sf -> negate_mask(sf))
-  scores     = [ score(f, speech, nonspeech) for f in files ]
+  scores     = @parallel (vcat) for f in files score(f, speech, nonspeech) end #[ score(f, speech, nonspeech) for f in files ]
   truth      = Int8[]
   flatscores = Float32[]
 
