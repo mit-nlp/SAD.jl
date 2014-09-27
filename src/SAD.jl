@@ -29,7 +29,7 @@ done(m :: LazyMap, s) = done(m.itr, s)
 # -------------------------------------------------------------------------------------------------------------------------
 function select_frames(sf :: SegmentedFile; masker = sf -> mask(sf))
   m, n = masker(sf)
-  lazy_map(x -> x[2], filter(f -> m[f[1]], enumerate(HTKFeatures(sf.fn))))
+  lazy_map(x -> x[2], filter(f -> m[f[1]], enumerate(features(HTKFile(sf.fn)))))
 end
 
 # RAT's style explicit speech/nonspeech labels
@@ -53,7 +53,7 @@ function split_train(files; splits = 6, iterations = 5, speech_frames = sf -> sp
   s     = map(speech_frames, files)
   ns    = map(nonspeech_frames, files)
   
-  d             = dims(HTKFeatures(files[1].fn))
+  d             = dims(HTKFile(files[1].fn))
   speech_gmm    = GMM(d, 1)
   nonspeech_gmm = GMM(d, 1)
 
@@ -69,25 +69,13 @@ function split_train(files; splits = 6, iterations = 5, speech_frames = sf -> sp
   return speech_gmm, nonspeech_gmm
 end
 
-function take_all(iter, size)
-  buffer = Array(Any, size)
-  idx = 1
-  for i in iter
-    if idx <= size
-      buffer[idx] = i
-      idx += 1
-    end
-  end
-  buffer
-end
-
-function kmeans_train(files; g = 64, iterations = 5, sample_size = 1500, speech_frames = sf -> speech(sf), nonspeech_frames = sf -> nonspeech(sf))
+function kmeans_train(files; g = 64, iterations = 5, sample_size = 40, speech_frames = sf -> speech(sf), nonspeech_frames = sf -> nonspeech(sf))
   init_s    = map(sf -> speech_frames(sf), files[sortperm(files, by = x -> rand())[1:min(sample_size, end)]])
   init_ns   = map(sf -> nonspeech_frames(sf), files[sortperm(files, by = x -> rand())[1:min(sample_size, end)]])
   speech    = map(speech_frames, files)
   nonspeech = map(nonspeech_frames, files)
   
-  d             = dims(HTKFeatures(files[1].fn))
+  d             = dims(HTKFile(files[1].fn))
   speech_gmm    = @spawn kmeans_init(GMM(d, g), chain(init_s...))
   nonspeech_gmm = @spawn kmeans_init(GMM(d, g), chain(init_ns...))
   
@@ -102,7 +90,7 @@ end
 # -------------------------------------------------------------------------------------------------------------------------
 function score(sf :: SegmentedFile, speech :: GMM, nonspeech :: GMM; window_radius = 10)
   scores = Float32[]
-  for (i, f) in enumerate(HTKFeatures(sf.fn))
+  for (i, f) in enumerate(features(HTKFile(sf.fn)))
     scr = ll(speech, f) - ll(nonspeech, f)
     push!(scores, scr)
   end
